@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 
+SCHEMA_VERSION = 2
+
+
 class Action(IntEnum):
     SHORT = 0
     DETAILED = 1
@@ -29,6 +32,24 @@ class FeedbackResult:
     message: str
     q_before: float | None = None
     q_after: float | None = None
+
+
+@dataclass(frozen=True)
+class MemoryFact:
+    """An explicit user-provided fact, not a model-generated inference."""
+
+    key: str
+    label: str
+    value: str
+
+    def __post_init__(self) -> None:
+        for text, limit in ((self.key, 120), (self.label, 80), (self.value, 2000)):
+            if not isinstance(text, str) or not text.strip() or len(text) > limit:
+                raise ValueError("A memory needs a short label and a value of at most 2,000 characters.")
+
+
+class MemoryConflictError(ValueError):
+    """The user changed memory while a response was being generated."""
 
 
 # Rewards belong to feedback. The UNIQUE constraint is the final defense against
@@ -103,6 +124,24 @@ CREATE TABLE IF NOT EXISTS learning_events (
     q_after REAL NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+
+CREATE TABLE IF NOT EXISTS user_memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memory_key TEXT NOT NULL UNIQUE CHECK (length(memory_key) BETWEEN 1 AND 120),
+    label TEXT NOT NULL CHECK (length(trim(label)) BETWEEN 1 AND 80),
+    value TEXT NOT NULL CHECK (length(trim(value)) BETWEEN 1 AND 2000),
+    source_message_id INTEGER REFERENCES messages(id),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS memory_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    revision INTEGER NOT NULL DEFAULT 0,
+    history_after_id INTEGER NOT NULL DEFAULT 0,
+    history_imported INTEGER NOT NULL DEFAULT 0 CHECK (history_imported IN (0, 1))
+);
+INSERT OR IGNORE INTO memory_settings (id) VALUES (1);
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, id);
 CREATE INDEX IF NOT EXISTS idx_strategies_run ON response_strategies(learning_run_id);

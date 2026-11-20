@@ -224,7 +224,8 @@
 }
 
 .st-key-new_conversation button > div,
-.st-key-learning_details button > div {
+.st-key-learning_details button > div,
+.st-key-saved_memory button > div {
   justify-content: flex-start;
   text-align: left;
 }
@@ -301,7 +302,8 @@
   background: #171717;
 }
 
-.st-key-learning_details button {
+.st-key-learning_details button,
+.st-key-saved_memory button {
   justify-content: flex-start;
 }
 

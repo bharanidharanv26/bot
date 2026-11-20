@@ -89,3 +89,52 @@ def test_new_conversation_keeps_saved_chat(ui, database):
     assert len(database.list_conversations()) == 2
     ui.radio[0].set_value(original_id).run()
     assert not ui.exception and len(ui.chat_message) == 2
+
+
+def test_facts_are_recalled_in_new_chat_without_feedback(ui, database):
+    ui.chat_input[0].set_value("My name is Asha. I live in Pune.").run()
+    assert not ui.exception
+    assert {fact["label"]: fact["value"] for fact in database.memory_snapshot()["facts"]} == {"Name": "Asha", "Location": "Pune"}
+    assert summary_metrics(load_interactions(database))["learning_updates"] == 0
+    button(ui, "New conversation").click().run()
+    ui.chat_input[0].set_value("What is my name?").run()
+    call = OllamaClient.generate.call_args
+    assert call.args[2] == ()
+    assert any(fact.label == "Name" and fact.value == "Asha" for fact in call.kwargs["memories"])
+    assert not ui.exception
+
+
+def test_failed_response_does_not_claim_or_persist_a_new_memory(ui, database, monkeypatch):
+    monkeypatch.setattr(OllamaClient, "generate", Mock(side_effect=OllamaError("Ollama unavailable")))
+    ui.chat_input[0].set_value("My name is Asha.").run()
+    assert not ui.exception and ui.error
+    assert database.memory_snapshot()["facts"] == []
+    assert summary_metrics(load_interactions(database))["responses"] == 0
+
+
+def test_saved_memory_editor_updates_and_forgets(ui, database):
+    ui.chat_input[0].set_value("My name is Asha.").run()
+    row = database.memory_snapshot()["facts"][0]
+    button(ui, "Saved memory").click().run()
+    assert not ui.exception
+    ui.text_area(key=f"memory_value_{row['id']}").set_value("Neha")
+    button(ui, "Save changes").click().run()
+    assert not ui.exception
+    assert database.memory_snapshot()["facts"][0]["value"] == "Neha"
+    button(ui, "Saved memory").click().run()
+    button(ui, "Forget this fact").click().run()
+    assert not ui.exception and database.memory_snapshot()["facts"] == []
+    ui.chat_input[0].set_value("What is my name?").run()
+    call = OllamaClient.generate.call_args
+    assert call.kwargs["memories"] == () and call.args[2] == ()
+
+
+def test_manual_fact_can_be_saved_without_ollama_or_feedback(ui, database):
+    button(ui, "Saved memory").click().run()
+    ui.text_input(key="memory_new_label").set_value("Project deadline")
+    ui.text_area(key="memory_new_value").set_value("Friday")
+    button(ui, "Save fact").click().run()
+    assert not ui.exception
+    assert database.memory_snapshot()["facts"][0]["value"] == "Friday"
+    assert summary_metrics(load_interactions(database))["responses"] == 0
+    assert summary_metrics(load_interactions(database))["learning_updates"] == 0

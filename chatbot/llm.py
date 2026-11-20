@@ -87,14 +87,17 @@ class OllamaClient:
         except OllamaError as exc:
             return ModelStatus(False, str(exc))
 
-    def generate(self, user_message: str, action: Action, history=()) -> str:
+    def generate(self, user_message: str, action: Action, history=(), *, memories=(), memory_update_labels=()) -> str:
         if not user_message.strip() or len(user_message.strip()) > self.settings.max_message_chars:
             raise ValueError(f"Enter between 1 and {self.settings.max_message_chars} characters.")
         status = self.check_connection()
         if not status.ready:
             raise OllamaError(status.detail)
         action = Action(action)
-        messages = build_messages(user_message, action, history, self.settings.history_char_budget)
+        messages = build_messages(
+            user_message, action, history, self.settings.history_char_budget,
+            memories=memories, memory_update_labels=memory_update_labels,
+        )
         result = self._request("/api/chat", {
             "model": self.settings.model,
             "messages": messages,

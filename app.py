@@ -6,9 +6,10 @@ import pandas as pd
 import streamlit as st
 
 from chatbot.llm import OllamaClient, OllamaError
+from chatbot.memory import MemoryManager
 from config import PROJECT_ROOT, load_settings
 from database.db import Database
-from database.models import Action
+from database.models import Action, SCHEMA_VERSION
 from evaluation.metrics import load_interactions, strategy_metrics, summary_metrics
 from evaluation.visualizations import average_reward_chart
 from feedback.feedback_manager import FeedbackManager
@@ -18,9 +19,11 @@ from reinforcement_learning.state import generate_state
 
 
 @st.cache_resource
-def get_database(path: str) -> Database:
+def get_database(path: str, schema_version: int = SCHEMA_VERSION) -> Database:
+    """The schema version is part of the cache key when the app is upgraded."""
     database = Database(path)
     database.initialize()
+    MemoryManager(database).import_existing_facts()
     return database
 
 
@@ -86,6 +89,55 @@ def show_learning_details(database: Database, agent: ContextualBandit, enabled: 
             st.caption("Rate a response to start the reward-over-time chart. No improvement can be assessed yet.")
 
 
+@st.dialog("Saved memory", width="large")
+def show_saved_memory(database: Database) -> None:
+    manager = MemoryManager(database)
+    facts = database.memory_snapshot()["facts"]
+    st.caption("Facts you shared, saved on this device and available across conversations.")
+    if facts:
+        records = {fact["id"]: fact for fact in facts}
+        selected = st.selectbox(
+            "Saved fact", options=list(records), key="selected_memory",
+            format_func=lambda memory_id: f"{records[memory_id]['label']}: {records[memory_id]['value'][:60]}",
+        )
+        fact = records[selected]
+        with st.form(f"edit_memory_{selected}"):
+            value = st.text_area(fact["label"], value=fact["value"], max_chars=2000, key=f"memory_value_{selected}")
+            if st.form_submit_button("Save changes"):
+                try:
+                    manager.update_fact(selected, value)
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    st.session_state["memory_notice"] = "Memory updated. Future answers will use the new value."
+                    st.rerun()
+        with st.container(horizontal=True):
+            if st.button("Forget this fact", key="forget_memory"):
+                database.delete_memory(selected)
+                st.session_state["memory_notice"] = "Fact removed from saved memory."
+                st.rerun()
+            if st.button("Forget all saved facts", key="forget_all_memories"):
+                database.clear_memories()
+                st.session_state["memory_notice"] = "Saved memory cleared."
+                st.rerun()
+        st.caption("Editing or forgetting refreshes the model's short-term context so old facts do not return. Visible chats stay saved.")
+    else:
+        st.write("No saved facts yet.")
+        st.caption('Try “My name is Asha” or “Remember that my project deadline is Friday.”')
+    with st.expander("Add a fact", expanded=not facts):
+        with st.form("add_memory", clear_on_submit=True):
+            label = st.text_input("Fact", placeholder="Name, favorite color, project deadline…", max_chars=80, key="memory_new_label")
+            value = st.text_area("Value", max_chars=2000, key="memory_new_value")
+            if st.form_submit_button("Save fact"):
+                try:
+                    manager.save_fact(label, value)
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    st.session_state["memory_notice"] = "Fact saved to memory."
+                    st.rerun()
+
+
 def main() -> None:
     st.set_page_config(page_title="Mini RL Chatbot", layout="centered", initial_sidebar_state="auto")
     st.html(PROJECT_ROOT / "styles.css")
@@ -93,13 +145,14 @@ def main() -> None:
         st.title("Mini RL Chatbot")
     try:
         settings = load_settings()
-        database = get_database(str(settings.db_path))
+        database = get_database(str(settings.db_path), SCHEMA_VERSION)
         client = OllamaClient(settings)
     except (ValueError, OSError, sqlite3.Error) as exc:
         st.error(f"Could not initialize the application: {exc}")
         st.stop()
     agent = ContextualBandit(database, settings)
     feedback_manager = FeedbackManager(database, agent)
+    memory_manager = MemoryManager(database)
 
     with st.sidebar:
         with st.container(key="sidebar_brand"):
@@ -119,10 +172,12 @@ def main() -> None:
         with st.container(key="sidebar_controls"):
             learning_enabled = st.toggle(
                 "Learning enabled", value=True, key="learning_enabled",
-                help="Only explicit feedback can update the policy. Paused ratings are saved but never replayed.",
+                help="Controls response-strategy learning, separately from saved memory. Paused ratings are saved but never replayed.",
             )
             if st.button("Learning details", key="learning_details", type="tertiary", width="stretch"):
                 show_learning_details(database, agent, learning_enabled)
+            if st.button("Saved memory", key="saved_memory", type="tertiary", width="stretch"):
+                show_saved_memory(database)
             status = client.check_connection()
             st.caption(f"{settings.model} · {'Connected locally' if status.ready else 'Unavailable'}")
             with st.expander("Settings"):
@@ -136,6 +191,8 @@ def main() -> None:
                 st.caption("Reset starts fresh Q-values and keeps saved chats and ratings.")
 
     if notice := st.session_state.pop("feedback_notice", None):
+        st.caption(notice)
+    if notice := st.session_state.pop("memory_notice", None):
         st.caption(notice)
     messages = database.get_messages(conversation_id)
     for message in messages:
@@ -197,12 +254,22 @@ def main() -> None:
             state = generate_state(pending["text"])
             selection = agent.select_action(state, learning_enabled)
             try:
+                memory = memory_manager.prepare(pending["text"], messages)
                 with st.spinner("Generating locally with Ollama..."):
-                    response = client.generate(pending["text"], selection.action, messages)
-                database.save_interaction(conversation_id, pending["text"], response, selection, settings.model)
+                    response = client.generate(
+                        pending["text"], selection.action, memory.history,
+                        memories=memory.context, memory_update_labels=[fact.label for fact in memory.updates],
+                    )
+                database.save_interaction(
+                    conversation_id, pending["text"], response, selection, settings.model,
+                    memory_updates=memory.updates, memory_revision=memory.revision,
+                )
             except (OllamaError, ValueError, sqlite3.Error) as exc:
                 st.session_state["generation_error"] = str(exc)
                 st.rerun()
+            if memory.updates:
+                labels = ", ".join(dict.fromkeys(fact.label for fact in memory.updates))
+                st.session_state["memory_notice"] = f"Saved to memory: {labels}. You can edit or forget facts in Saved memory."
             st.session_state.pop("pending_message", None)
             st.session_state.pop("generation_error", None)
             st.rerun()

@@ -9,7 +9,7 @@ import pytest
 
 from chatbot.llm import ModelStatus, OllamaClient, OllamaError
 from chatbot.prompt_builder import STRATEGY_INSTRUCTIONS, build_messages
-from database.models import Action
+from database.models import Action, MemoryFact
 
 
 def http_json(value):
@@ -47,6 +47,19 @@ def test_history_is_bounded_and_cannot_override_system_message():
     assert messages[1:-1] == history[-2:]
     assert len([message for message in messages if message["role"] == "system"]) == 1
     assert build_messages("Now?", Action.SHORT, history, history_char_budget=6)[1:-1] == []
+
+
+def test_actual_ollama_request_includes_persistent_memory(settings):
+    client = OllamaClient(settings)
+    client.opener.open = Mock(side_effect=[
+        http_json({"models": [{"name": settings.model}]}),
+        http_json({"message": {"role": "assistant", "content": "Your name is Asha."}, "done": True}),
+    ])
+    fact = MemoryFact("profile:name", "Name", "Asha")
+    answer = client.generate("What is my name?", Action.SHORT, memories=[fact])
+    payload = json.loads(client.opener.open.call_args_list[1].args[0].data)
+    assert answer == "Your name is Asha."
+    assert '"fact": "Name", "value": "Asha"' in payload["messages"][0]["content"]
 
 
 @pytest.mark.parametrize("error", [URLError("connection refused"), TimeoutError("slow model")])
