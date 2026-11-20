@@ -1,0 +1,363 @@
+/* A monochrome chat surface. Streamlit still owns the accessible widgets. */
+:root {
+  --chat-background: #212121;
+  --chat-surface: #303030;
+  --chat-text: #ececec;
+  --chat-muted: #aaa;
+  --chat-border: #414141;
+}
+
+.stApp,
+.stApp :is(h1, h2, h3, p, textarea, button, input, label) {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+[data-testid="stHeader"] {
+  background: transparent;
+}
+
+[data-testid="stMainBlockContainer"] {
+  max-width: 52rem;
+  padding: 2.5rem 2rem 4rem;
+}
+
+[data-testid="stBottom"] {
+  background: var(--chat-background);
+}
+
+[data-testid="stBottomBlockContainer"] {
+  max-width: 52rem;
+  padding: 0.75rem 2rem 1.25rem;
+}
+
+.st-key-chat_header {
+  margin-bottom: 1.5rem;
+}
+
+.st-key-chat_header h1 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  padding: 0;
+}
+
+/* The welcome composer is inline. During a conversation it docks below chat. */
+.st-key-welcome {
+  margin-top: clamp(3rem, 18dvh, 10rem);
+}
+
+.welcome-heading {
+  margin: 0 0 1.75rem;
+  color: var(--chat-text);
+  text-align: center;
+  font-size: clamp(1.9rem, 3.5vw, 2.7rem);
+  font-weight: 550;
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+.st-key-chat_status [data-testid="stCaptionContainer"] {
+  color: var(--chat-muted);
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+[data-testid="stChatInput"] {
+  background: var(--chat-surface);
+  border: 1px solid var(--chat-border);
+  border-radius: 1.75rem;
+  min-height: 3.75rem;
+  box-shadow: none;
+}
+
+[data-testid="stChatInput"]:focus-within {
+  border-color: #9a9a9a;
+  box-shadow: none;
+}
+
+/* The inner native input also paints a surface; keep both corners in sync. */
+[data-testid="stChatInput"] > div {
+  min-height: inherit;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  overflow: hidden;
+}
+
+[data-testid="stChatInput"] textarea {
+  font-size: 1rem;
+  caret-color: white;
+}
+
+[data-testid="stChatInput"] textarea::placeholder {
+  color: #b6b6b6;
+}
+
+[data-testid="stChatInputSubmitButton"] {
+  border-radius: 50%;
+  background: #ededed;
+  color: #171717;
+}
+
+[data-testid="stChatInputSubmitButton"]:disabled {
+  background: #484848;
+  color: #a3a3a3;
+}
+
+/* Keep native chat-message semantics, with text-only, familiar chat styling. */
+[data-testid="stChatMessageAvatarUser"],
+[data-testid="stChatMessageAvatarAssistant"] {
+  display: none;
+}
+
+[data-testid="stChatMessage"] {
+  background: transparent;
+  border-radius: 0;
+  padding: 0.75rem 0 1.25rem;
+  gap: 0;
+}
+
+[data-testid="stChatMessageContent"] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-testid="stChatMessageContent"] [data-testid="stMarkdownContainer"] p {
+  line-height: 1.75;
+}
+
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+  justify-content: flex-end;
+  padding-bottom: 0.5rem;
+}
+
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"])
+  [data-testid="stChatMessageContent"] {
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: 85%;
+  margin-left: auto;
+  margin-right: 0;
+}
+
+[class*="st-key-user_message_"] {
+  padding: 0.75rem 1.1rem;
+  border-radius: 1.5rem;
+  background: var(--chat-surface);
+}
+
+/* Match the zero last-paragraph margin below; otherwise native markdown
+   subtracts 1rem and the text sits too low inside its bubble. */
+[class*="st-key-user_message_"] [data-testid="stMarkdownContainer"] {
+  margin-bottom: 0;
+}
+
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"])
+  [data-testid="stMarkdownContainer"] p:last-child {
+  margin-bottom: 0;
+}
+
+[class*="st-key-response_feedback_"] {
+  margin-top: 0.6rem;
+}
+
+[class*="st-key-response_feedback_"] [data-testid="stCaptionContainer"] {
+  color: var(--chat-muted);
+  font-size: 0.75rem;
+}
+
+[class*="st-key-response_feedback_"] button {
+  min-height: 2rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid #454545;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #c5c5c5;
+}
+
+[class*="st-key-response_feedback_"] button p {
+  font-size: 0.75rem;
+  line-height: 1.3 !important;
+}
+
+/* Chat navigation, followed by the quieter learning and connection controls. */
+[data-testid="stSidebar"] {
+  border-right: 1px solid #292929;
+}
+
+[data-testid="stSidebarUserContent"] {
+  padding: 0.75rem 1rem 1.5rem;
+  margin: 0;
+}
+
+[data-testid="stSidebarContent"] {
+  padding-inline: 0;
+}
+
+[data-testid="stSidebarUserContent"] > [data-testid="stVerticalBlock"],
+[data-testid="stSidebarUserContent"] > div > [data-testid="stVerticalBlock"] {
+  min-height: calc(100dvh - 8.5rem);
+}
+
+[data-testid="stSidebarUserContent"] > [data-testid="stVerticalBlock"]
+  > [data-testid="stLayoutWrapper"]:has(.st-key-sidebar_controls),
+[data-testid="stSidebarUserContent"] > div > [data-testid="stVerticalBlock"]
+  > [data-testid="stLayoutWrapper"]:has(.st-key-sidebar_controls) {
+  margin-top: auto;
+}
+
+.st-key-sidebar_brand h3 {
+  padding: 0 0 1rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.st-key-new_conversation button {
+  justify-content: flex-start;
+  padding: 0.65rem 0.9rem;
+  min-height: 2.75rem;
+  border-color: #424242;
+  border-radius: 0.65rem;
+  background: #222;
+}
+
+.st-key-new_conversation button > div,
+.st-key-learning_details button > div {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.st-key-conversation_id [role="radiogroup"] {
+  max-height: 36dvh;
+  overflow-y: auto;
+  gap: 0.15rem;
+  padding: 0.2rem;
+}
+
+.st-key-conversation_id [data-testid="stRadioOption"],
+.st-key-conversation_id [data-baseweb="radio"] {
+  width: 100%;
+  min-height: 2.5rem;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.5rem;
+  background: transparent;
+}
+
+.st-key-conversation_id [data-testid="stRadioOption"] > div {
+  width: 100%;
+  min-width: 0;
+}
+
+/* The actual radio input remains keyboard- and screen-reader-accessible. */
+.st-key-conversation_id [data-baseweb="radio"] > div:first-child,
+.st-key-conversation_id [data-testid="stRadioOption"] > div > div:first-child {
+  display: none;
+}
+
+.st-key-conversation_id [data-baseweb="radio"]:has(input:checked),
+.st-key-conversation_id [data-testid="stRadioOption"][data-selected="true"] {
+  background: #303030;
+}
+
+.st-key-conversation_id [data-baseweb="radio"]:has(input:focus-visible),
+.st-key-conversation_id [data-testid="stRadioOption"][data-focus-visible="true"] {
+  outline: 2px solid #ddd;
+  outline-offset: -2px;
+}
+
+.st-key-conversation_id [data-testid="stMarkdownContainer"] {
+  min-width: 0;
+}
+
+.st-key-conversation_id [data-testid="stMarkdownContainer"] p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.st-key-sidebar_controls {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #333;
+}
+
+.st-key-sidebar_controls [data-testid="stCaptionContainer"] {
+  font-size: 0.75rem;
+  color: var(--chat-muted);
+}
+
+/* A white switch needs a dark thumb to make its enabled state visible. */
+.st-key-learning_enabled label:has(input[role="switch"])
+  > div:not([data-testid]) > div {
+  background: #ececec;
+}
+
+.st-key-learning_enabled label:has(input[role="switch"]:checked)
+  > div:not([data-testid]) > div {
+  background: #171717;
+}
+
+.st-key-learning_details button {
+  justify-content: flex-start;
+}
+
+[data-testid="stExpander"] {
+  border-color: #3a3a3a;
+}
+
+[data-testid="stDialog"] [role="dialog"] {
+  max-width: 62rem;
+  background: var(--chat-background);
+  border: 1px solid var(--chat-border);
+  border-radius: 1rem;
+}
+
+button:focus-visible {
+  outline: 2px solid #ececec !important;
+  outline-offset: 3px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [class*="st-key-response_feedback_"] button:hover,
+  .st-key-new_conversation button:hover {
+    border-color: #aaa;
+    background: #363636;
+    color: white;
+  }
+
+  .st-key-conversation_id [data-baseweb="radio"]:hover,
+  .st-key-conversation_id [data-testid="stRadioOption"]:hover {
+    background: #272727;
+  }
+}
+
+@media (max-width: 640px) {
+  [data-testid="stMainBlockContainer"] {
+    padding: 3.25rem 1.1rem 2rem;
+  }
+
+  [data-testid="stBottomBlockContainer"] {
+    padding: 0.75rem 1rem max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .st-key-welcome {
+    margin-top: 15dvh;
+  }
+
+  .welcome-heading {
+    margin-bottom: 1.25rem;
+  }
+
+  [class*="st-key-response_feedback_"] button {
+    min-height: 2.75rem;
+  }
+
+  [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"])
+    [data-testid="stChatMessageContent"] {
+    max-width: 92%;
+  }
+}
